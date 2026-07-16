@@ -2,6 +2,7 @@
   "version": 2,
   "rewrites": [
     { "source": "/api/analyze", "destination": "/api/analyze.js" },
-    { "source": "/(.*)", "destination": "/index.html" }
+    { "source": "/", "destination": "/index.html" },
+    { "source": "/(.*)", "destination": "/$1" }
   ]
 }
