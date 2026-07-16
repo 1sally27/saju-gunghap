@@ -123,204 +123,32 @@ function getSipsin(dayGanIdx, targetGanIdx) {
   return "-";
 }
 
-const PILLAR_META = [
-  { key: "year", label: "년" },
-  { key: "month", label: "월" },
-  { key: "day", label: "일" },
-  { key: "hour", label: "시" },
+const SINSAL_GROUPS = [
+  { members: [8, 0, 4], dohwa: 9, yeokma: 2, hwagae: 4 },
+  { members: [2, 6, 10], dohwa: 3, yeokma: 8, hwagae: 10 },
+  { members: [5, 9, 1], dohwa: 6, yeokma: 11, hwagae: 1 },
+  { members: [11, 3, 7], dohwa: 0, yeokma: 5, hwagae: 7 },
 ];
-
-function getPillarEntries(pillars) {
-  return PILLAR_META.map(({ key, label }) => ({
-    key,
-    label,
-    gan: pillars[key].gan,
-    ji: pillars[key].ji,
-  }));
-}
-
-function addStar(target, name, positions, note = "") {
-  const cleanPositions = [...new Set((positions || []).filter(Boolean))];
-  if (cleanPositions.length === 0) return;
-
-  const found = target.find((item) => item.name === name);
-  if (found) {
-    found.positions = [...new Set([...found.positions, ...cleanPositions])];
-    return;
-  }
-
-  target.push({ name, positions: cleanPositions, note });
-}
-
-function findJiPositions(entries, targets) {
-  const targetSet = new Set(Array.isArray(targets) ? targets : [targets]);
-  return entries.filter((entry) => targetSet.has(entry.ji)).map((entry) => entry.label);
-}
-
-function findGanPositions(entries, targets) {
-  const targetSet = new Set(Array.isArray(targets) ? targets : [targets]);
-  return entries.filter((entry) => targetSet.has(entry.gan)).map((entry) => entry.label);
-}
-
-/*
- * 신살은 학파별로 산출 기준이 다릅니다.
- * 이 페이지는 국내 만세력에서 흔히 쓰는 방식으로 다음을 계산합니다.
- * - 12신살: 일지의 삼합국 기준
- * - 천을/태극/문창/복성/국인/건록/암록/금여/양인: 일간 기준
- * - 천덕/월덕: 월지 기준
- * - 백호/괴강/공망: 일주 기준
- * - 귀문/원진: 원국 지지 조합 기준
- */
-const TWELVE_SINSAL_NAMES = [
-  "겁살", "재살", "천살", "지살", "년살(도화살)", "월살",
-  "망신살", "장성살", "반안살", "역마살", "육해살", "화개살",
-];
-
-const TWELVE_SINSAL_GROUPS = [
-  { members: [8, 0, 4], startJi: 5 },   // 신자진 → 사에서 겁살 시작
-  { members: [2, 6, 10], startJi: 11 }, // 인오술 → 해에서 겁살 시작
-  { members: [5, 9, 1], startJi: 2 },   // 사유축 → 인에서 겁살 시작
-  { members: [11, 3, 7], startJi: 8 },  // 해묘미 → 신에서 겁살 시작
-];
-
-const TIAN_YI = [[1, 7], [0, 8], [11, 9], [11, 9], [1, 7], [0, 8], [1, 7], [6, 2], [5, 3], [5, 3]];
-const TAI_JI = [[0, 6], [0, 6], [3, 9], [3, 9], [1, 4, 7, 10], [1, 4, 7, 10], [2, 11], [2, 11], [5, 8], [5, 8]];
-const WEN_CHANG = [5, 6, 8, 9, 8, 9, 11, 0, 2, 3];
-const FU_XING = [2, 1, 0, 9, 8, 7, 6, 5, 4, 3];
-const GUO_YIN = [10, 11, 1, 2, 1, 2, 4, 5, 7, 8];
-const JIAN_LU = [2, 3, 5, 6, 5, 6, 8, 9, 11, 0];
-const AN_LU = [11, 10, 8, 7, 8, 7, 5, 4, 2, 1];
-const JIN_YU = [4, 5, 7, 8, 7, 8, 10, 11, 1, 2];
-const YANG_REN = [3, 2, 6, 5, 6, 5, 9, 8, 0, 11];
-
-const TIAN_DE = {
-  0: { type: "ji", value: 5 },   // 자월 → 사
-  1: { type: "gan", value: 6 },  // 축월 → 경
-  2: { type: "gan", value: 3 },  // 인월 → 정
-  3: { type: "ji", value: 8 },   // 묘월 → 신
-  4: { type: "gan", value: 8 },  // 진월 → 임
-  5: { type: "gan", value: 7 },  // 사월 → 신
-  6: { type: "ji", value: 11 },  // 오월 → 해
-  7: { type: "gan", value: 0 },  // 미월 → 갑
-  8: { type: "gan", value: 9 },  // 신월 → 계
-  9: { type: "ji", value: 2 },   // 유월 → 인
-  10: { type: "gan", value: 2 }, // 술월 → 병
-  11: { type: "gan", value: 1 }, // 해월 → 을
-};
-
-const WOL_DEOK = {
-  2: 2, 6: 2, 10: 2, // 인오술 → 병
-  8: 8, 0: 8, 4: 8,  // 신자진 → 임
-  11: 0, 3: 0, 7: 0, // 해묘미 → 갑
-  5: 6, 9: 6, 1: 6,  // 사유축 → 경
-};
-
-const BAEKHO_DAY_PILLARS = new Set(["0-4", "1-7", "2-10", "3-1", "4-4", "8-10", "9-1"]);
-const GOEGANG_DAY_PILLARS = new Set(["4-10", "6-4", "6-10", "8-4"]);
-const GWIMUN_PAIRS = [[0, 9], [1, 6], [2, 7], [3, 8], [4, 11], [5, 10]];
-const WONJIN_PAIRS = [[0, 7], [1, 6], [2, 9], [3, 8], [4, 11], [5, 10]];
-const GONGMANG_BY_XUN = [[10, 11], [8, 9], [6, 7], [4, 5], [2, 3], [0, 1]];
-
-function findSexagenaryIndex(gan, ji) {
-  for (let index = 0; index < 60; index++) {
-    if (index % 10 === gan && index % 12 === ji) return index;
-  }
-  return -1;
-}
-
-function findBranchPairMatches(entries, pairs) {
-  const matches = [];
-  for (let i = 0; i < entries.length; i++) {
-    for (let j = i + 1; j < entries.length; j++) {
-      const a = entries[i].ji;
-      const b = entries[j].ji;
-      const matched = pairs.some(([x, y]) => (a === x && b === y) || (a === y && b === x));
-      if (matched) matches.push(`${entries[i].label}-${entries[j].label}`);
-    }
-  }
-  return matches;
-}
 
 function getSinsal(pillars) {
-  const entries = getPillarEntries(pillars);
-  const dayGan = pillars.day.gan;
-  const dayJi = pillars.day.ji;
-  const monthJi = pillars.month.ji;
-
-  const result = {
-    noble: [],
-    twelve: [],
-    special: [],
-  };
-
-  // 12신살: 일지의 삼합국을 기준으로 각 기둥의 지지를 판정합니다.
-  const twelveGroup = TWELVE_SINSAL_GROUPS.find((group) => group.members.includes(dayJi));
-  if (twelveGroup) {
-    entries.forEach((entry) => {
-      const starIndex = (entry.ji - twelveGroup.startJi + 12) % 12;
-      addStar(result.twelve, TWELVE_SINSAL_NAMES[starIndex], [entry.label]);
-    });
-  }
-
-  // 주요 귀인·길신
-  addStar(result.noble, "천을귀인", findJiPositions(entries, TIAN_YI[dayGan]));
-  addStar(result.noble, "태극귀인", findJiPositions(entries, TAI_JI[dayGan]));
-  addStar(result.noble, "문창귀인", findJiPositions(entries, WEN_CHANG[dayGan]));
-  addStar(result.noble, "복성귀인", findJiPositions(entries, FU_XING[dayGan]));
-  addStar(result.noble, "국인귀인", findJiPositions(entries, GUO_YIN[dayGan]));
-  addStar(result.noble, "건록", findJiPositions(entries, JIAN_LU[dayGan]));
-  addStar(result.noble, "암록", findJiPositions(entries, AN_LU[dayGan]));
-  addStar(result.noble, "금여귀인", findJiPositions(entries, JIN_YU[dayGan]));
-
-  const tianDeTarget = TIAN_DE[monthJi];
-  if (tianDeTarget) {
-    const positions = tianDeTarget.type === "gan"
-      ? findGanPositions(entries, tianDeTarget.value)
-      : findJiPositions(entries, tianDeTarget.value);
-    addStar(result.noble, "천덕귀인", positions);
-  }
-  addStar(result.noble, "월덕귀인", findGanPositions(entries, WOL_DEOK[monthJi]));
-
-  // 특수 신살
-  addStar(result.special, "양인살", findJiPositions(entries, YANG_REN[dayGan]));
-
-  const dayPillarKey = `${pillars.day.gan}-${pillars.day.ji}`;
-  if (BAEKHO_DAY_PILLARS.has(dayPillarKey)) addStar(result.special, "백호대살", ["일주"]);
-  if (GOEGANG_DAY_PILLARS.has(dayPillarKey)) addStar(result.special, "괴강살", ["일주"]);
-
-  addStar(result.special, "귀문관살", findBranchPairMatches(entries, GWIMUN_PAIRS));
-  addStar(result.special, "원진살", findBranchPairMatches(entries, WONJIN_PAIRS));
-
-  const sexagenaryIndex = findSexagenaryIndex(pillars.day.gan, pillars.day.ji);
-  if (sexagenaryIndex >= 0) {
-    const emptyBranches = GONGMANG_BY_XUN[Math.floor(sexagenaryIndex / 10)];
-    addStar(result.special, "공망", findJiPositions(entries, emptyBranches));
-  }
-
+  const group = SINSAL_GROUPS.find((g) => g.members.includes(pillars.day.ji));
+  if (!group) return [];
+  const branches = [pillars.year.ji, pillars.month.ji, pillars.day.ji, pillars.hour.ji];
+  const result = [];
+  if (branches.includes(group.dohwa)) result.push("도화살");
+  if (branches.includes(group.yeokma)) result.push("역마살");
+  if (branches.includes(group.hwagae)) result.push("화개살");
   return result;
-}
-
-function compactSinsalForApi(sinsal) {
-  const compact = (items) => items.map((item) => ({
-    name: item.name,
-    positions: item.positions,
-  }));
-
-  return {
-    noble: compact(sinsal.noble),
-    twelve: compact(sinsal.twelve),
-    special: compact(sinsal.special),
-  };
 }
 
 /* ================= Vercel API 연동 (API 키 노출 X) ================= */
 
 // API 키 없이 Vercel 백엔드(/api/analyze)로 데이터만 보냅니다.
-async function analyzeWithGemini(names, pillarsList, sinsalList) {
+async function analyzeWithGemini(names, pillarsList) {
   const response = await fetch("/api/analyze", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ names, pillarsList, sinsalList })
+    body: JSON.stringify({ names, pillarsList })
   });
 
   // response.json()만 바로 호출하면 서버가 HTML/빈 문자열을 보냈을 때
@@ -529,44 +357,6 @@ function CategoryCard({ data, open, onToggle }) {
   );
 }
 
-function SinsalBadge({ item }) {
-  return (
-    <span
-      className="inline-flex items-center rounded-full text-xs"
-      style={{ padding: "4px 9px", background: C.goldBg, border: `1px solid ${C.border}`, color: C.gold }}
-      title={item.note || ""}
-    >
-      <strong style={{ fontWeight: 600 }}>{item.name}</strong>
-      <span style={{ marginLeft: 4, color: C.mutedLight }}>· {item.positions.join("/")}</span>
-    </span>
-  );
-}
-
-function SinsalRow({ title, items, emptyText }) {
-  return (
-    <div>
-      <div className="text-xs mb-1.5" style={{ color: C.mutedLight }}>{title}</div>
-      <div className="flex flex-wrap gap-1.5">
-        {items?.length > 0 ? items.map((item) => (
-          <SinsalBadge key={`${title}-${item.name}`} item={item} />
-        )) : (
-          <span className="text-xs" style={{ color: C.dashed }}>{emptyText}</span>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function SinsalPanel({ data }) {
-  return (
-    <div className="rounded-xl mt-3 flex flex-col gap-3" style={{ background: C.cardAlt, border: `1px solid ${C.borderLight}`, padding: 12 }}>
-      <SinsalRow title="주요 귀인 · 길신" items={data?.noble || []} emptyText="해당 귀인 없음" />
-      <SinsalRow title="12신살 · 일지 기준" items={data?.twelve || []} emptyText="계산 결과 없음" />
-      <SinsalRow title="특수 신살" items={data?.special || []} emptyText="해당 특수 신살 없음" />
-    </div>
-  );
-}
-
 function PaywallCard({ onPay, paying }) {
   return (
     <div className="rounded-2xl text-center mb-6" style={{ background: C.navy, color: C.navyText, padding: 20 }}>
@@ -671,10 +461,8 @@ function AppPage() {
         return getPillars(y, m, d, hh);
       });
 
-      const sinsalList = pillarsList.map((pillars) => compactSinsalForApi(getSinsal(pillars)));
-
-      // 원국과 계산된 주요 신살을 함께 백엔드로 전송합니다.
-      const rawAiResult = await analyzeWithGemini(names, pillarsList, sinsalList);
+      // API 키 없이 백엔드로 전송
+      const rawAiResult = await analyzeWithGemini(names, pillarsList);
       const aiResult = normalizeAnalysisResult(rawAiResult, names, pillarsList);
 
       setResult(aiResult);
@@ -752,25 +540,30 @@ function AppPage() {
             {paid && result && (
               <>
                 <div className="rounded-2xl mb-4" style={{ background: C.card, border: `1px solid ${C.border}`, padding: 16 }}>
-                  <div className="text-xs font-semibold mb-3" style={{ color: C.mutedLight, letterSpacing: "0.1em" }}>사주 원국 · 주요 신살</div>
+                  <div className="text-xs font-semibold mb-3" style={{ color: C.mutedLight, letterSpacing: "0.1em" }}>사주 원국 (AI 분석 기준)</div>
                   {result?.pillarsList?.map((p, i) => {
                     const sinsal = getSinsal(p);
                     return (
                       <div key={i}>
-                        {i > 0 && <div style={{ height: 1, background: C.borderLight, margin: "16px 0" }} />}
+                        {i > 0 && <div style={{ height: 1, background: C.borderLight, margin: "12px 0" }} />}
                         <div className="text-xs mb-2" style={{ color: C.mutedLight }}>{result?.names?.[i] || `멤버 ${i + 1}`}</div>
-                        <div className="flex gap-2 justify-center">
-                          <PillarChip gan={p.hour.gan} ji={p.hour.ji} label="시" sipsin={getSipsin(p.day.gan, p.hour.gan)} />
-                          <PillarChip gan={p.day.gan} ji={p.day.ji} label="일" sipsin="일간" />
-                          <PillarChip gan={p.month.gan} ji={p.month.ji} label="월" sipsin={getSipsin(p.day.gan, p.month.gan)} />
-                          <PillarChip gan={p.year.gan} ji={p.year.ji} label="년" sipsin={getSipsin(p.day.gan, p.year.gan)} />
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex gap-2">
+                            <PillarChip gan={p.hour.gan} ji={p.hour.ji} label="시" sipsin={getSipsin(p.day.gan, p.hour.gan)} />
+                            <PillarChip gan={p.day.gan} ji={p.day.ji} label="일" sipsin="일간" />
+                            <PillarChip gan={p.month.gan} ji={p.month.ji} label="월" sipsin={getSipsin(p.day.gan, p.month.gan)} />
+                            <PillarChip gan={p.year.gan} ji={p.year.ji} label="년" sipsin={getSipsin(p.day.gan, p.year.gan)} />
+                          </div>
+                          <div className="flex flex-col items-end gap-1.5 shrink-0" style={{ paddingTop: 20 }}>
+                            {sinsal.length > 0 ? sinsal.map((s, k) => (
+                              <span key={k} className="text-xs font-medium rounded-full" style={{ padding: "3px 9px", background: C.goldBg, border: `1px solid ${C.border}`, color: C.gold }}>{s}</span>
+                            )) : <span className="text-xs" style={{ color: C.dashed }}>해당 신살 없음</span>}
+                          </div>
                         </div>
-                        <SinsalPanel data={sinsal} />
                       </div>
                     );
                   })}
                 </div>
-                <div className="text-xs mb-4 px-1 leading-relaxed" style={{ color: C.mutedLight }}>신살은 학파별 산출법이 달라 이 페이지에서는 국내에서 흔히 쓰는 일간·일지·월지 기준의 주요 신살을 표시해요.</div>
 
                 {result.mode === "pair" ? (
                   <>
