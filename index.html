@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>우리사이 어떤사이?</title>
+  <title>우리들사이 어떤사이?</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
@@ -141,69 +141,21 @@ function getSinsal(pillars) {
   return result;
 }
 
-/* ================= Gemini API 연동 (해석 엔진) ================= */
+/* ================= Vercel API 연동 (API 키 노출 X) ================= */
 
-// 단 하나로 묶인 API 호출 함수 (프롬프트 포함)
-async function analyzeWithGemini(apiKey, names, pillarsList) { 
-  const mode = pillarsList.length === 2 ? "pair" : "group";
-  const personInfo = names.map((name, i) => `${name}: ${JSON.stringify(pillarsList[i])}`).join("\n");
-  
-  let prompt = `너는 힙하고 통찰력 있는 사주/궁합 전문가야. 다음 사람들의 사주 원국(천간/지지)을 바탕으로 궁합과 케미를 분석해줘.
-대상자:
-${personInfo}
-
-`;
-
-  if (mode === "pair") {
-    prompt += `두 사람의 일간, 일지, 오행 밸런스, 합충 등을 종합해 아래 JSON 형태로만 응답해. 부가 설명이나 마크다운 백틱(\`\`\`) 없이 순수 JSON 텍스트만 출력해.
-{
-  "relLabel": "일간 핵심 관계 (예: A -> B 상생, 비화 등 10자 내외)",
-  "categories": [
-    { "title": "평소에", "icon": "日", "summary": "요약 한줄", "detail": "상세 풀이 (3~4문장)" },
-    { "title": "밥", "icon": "食", "summary": "요약", "detail": "상세" },
-    { "title": "여행 갈 때", "icon": "旅", "summary": "요약", "detail": "상세" },
-    { "title": "일할 때", "icon": "職", "summary": "요약", "detail": "상세" },
-    { "title": "대화할 때", "icon": "談", "summary": "요약", "detail": "상세" },
-    { "title": "각자의 속마음", "icon": "心", "summary": "요약", "detail": "상세" },
-    { "title": "세상이 종말을 맞았을 때", "icon": "末", "summary": "요약", "detail": "상세" }
-  ]
-}`;
-  } else {
-    prompt += `여러 사람의 그룹 다이내믹을 분석해 아래 JSON 형태로만 응답해. 부가 설명이나 마크다운 백틱(\`\`\`) 없이 순수 JSON 텍스트만 출력해.
-{
-  "group": {
-    "roles": [ {"tag": "리더"}, {"tag": "아이디어뱅크"} ], // 인원수만큼 성향 태그 배열
-    "summary": "이 그룹의 핵심 다이내믹 요약",
-    "detail": "누가 누구와 자주 부딪히고, 누가 중재하는지 등 그룹 내 관계망 상세 설명"
-  },
-  "groupCategories": [
-    { "title": "평소에", "icon": "日", "summary": "요약", "detail": "상세" },
-    { "title": "밥", "icon": "食", "summary": "요약", "detail": "상세" },
-    { "title": "여행 갈 때", "icon": "旅", "summary": "요약", "detail": "상세" },
-    { "title": "일할 때", "icon": "職", "summary": "요약", "detail": "상세" },
-    { "title": "대화할 때", "icon": "談", "summary": "요약", "detail": "상세" },
-    { "title": "각자의 속마음", "icon": "心", "summary": "요약", "detail": "상세" },
-    { "title": "세상이 종말을 맞았을 때", "icon": "末", "summary": "요약", "detail": "상세" }
-  ]
-}`;
-  }
-
-  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
+// API 키 없이 Vercel 백엔드(/api/analyze)로 데이터만 보냅니다.
+async function analyzeWithGemini(names, pillarsList) { 
+  const response = await fetch("/api/analyze", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: { responseMimeType: "application/json" }
-    })
+    body: JSON.stringify({ names, pillarsList })
   });
 
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error?.message || "API 요청 실패");
+  if (!response.ok) {
+    throw new Error("서버에서 에러가 발생했습니다.");
+  }
 
-  let text = data.candidates[0].content.parts[0].text;
-  text = text.replace(/```json/g, "").replace(/```/g, "").trim();
-  const parsed = JSON.parse(text);
-  return { mode, names, pillarsList, ...parsed };
+  return response.json();
 }
 
 /* ================= UI 조각 ================= */
@@ -329,9 +281,9 @@ function PaywallCard({ onPay, paying }) {
   );
 }
 
-/* ================= 랜딩 페이지 ================= */
+/* ================= 랜딩 페이지 (API 키 입력창 제거) ================= */
 
-function LandingPage({ onPay, apiKey, setApiKey }) {
+function LandingPage({ onStart }) {
   const features = [
     { icon: "命", title: "정밀 만세력 계산", desc: "생년월일시를 입력하면 년·월·일·시 사주를 바로 뽑아드려요." },
     { icon: "友", title: "친구 무제한 추가", desc: "둘이든 셋이든 다섯이든, 우리 무리 전체 궁합을 한 곳에서." },
@@ -351,18 +303,6 @@ function LandingPage({ onPay, apiKey, setApiKey }) {
           <p className="text-sm leading-relaxed" style={{ color: C.muted }}>생년월일시 몇 줄이면 충분해요.<br />AI 만세력 엔진이 딥하게 풀어드릴게요.</p>
         </div>
 
-        <div className="mb-6">
-          <input
-            type="text"
-            placeholder="Gemini API Key를 입력해주세요"
-            className="w-full rounded-xl text-sm outline-none"
-            style={{ background: C.card, border: `1px solid ${C.border}`, color: C.ink, padding: "14px 16px" }}
-            value={apiKey}
-            onChange={(e) => setApiKey(e.target.value)}
-          />
-          <p className="text-xs mt-2 text-center" style={{ color: C.mutedLight }}>API Key는 브라우저에만 유지되며 서버로 전송되지 않습니다.</p>
-        </div>
-
         <div className="flex flex-col gap-3 mb-8">
           {features.map((f, i) => (
             <div key={i} className="flex items-start gap-3 rounded-2xl" style={{ background: C.card, border: `1px solid ${C.border}`, padding: 16 }}>
@@ -376,7 +316,7 @@ function LandingPage({ onPay, apiKey, setApiKey }) {
         </div>
 
         <button
-          type="button" onClick={onPay}
+          type="button" onClick={onStart}
           className="w-full rounded-2xl font-semibold"
           style={{ padding: "16px 0", fontSize: 15, background: C.red, color: "#ffffff", letterSpacing: "0.02em" }}
         >
@@ -389,7 +329,7 @@ function LandingPage({ onPay, apiKey, setApiKey }) {
 
 /* ================= 메인 앱 페이지 ================= */
 
-function AppPage({ apiKey }) {
+function AppPage() {
   const [friends, setFriends] = useState([
     { id: newId(), name: "", date: "1996-05-14", time: "09:30", gender: "여성" },
     { id: newId(), name: "", date: "1997-11-02", time: "21:10", gender: "남성" },
@@ -409,11 +349,12 @@ function AppPage({ apiKey }) {
         const [hh] = f.time.split(":").map(Number);
         return getPillars(y, m, d, hh);
       });
-      const aiResult = await analyzeWithGemini(apiKey, names, pillarsList);
+      // API 키 없이 백엔드로 전송
+      const aiResult = await analyzeWithGemini(names, pillarsList);
       setResult(aiResult);
       setPaid(true);
     } catch (e) {
-      alert("AI 분석 중 오류가 발생했습니다. API Key나 네트워크 상태를 확인해주세요.\n\n" + e.message);
+      alert("AI 분석 중 오류가 발생했습니다. Vercel 서버 상태를 확인해주세요.\n\n" + e.message);
       setConfirmed(false);
     }
     setPaying(false);
@@ -546,19 +487,11 @@ function AppPage({ apiKey }) {
 
 function App() {
   const [page, setPage] = useState("landing");
-  const [apiKey, setApiKey] = useState("");
 
   return page === "landing" ? (
-    <LandingPage 
-      onPay={() => {
-        if(!apiKey.trim()) { alert("Gemini API Key를 입력해주세요."); return; }
-        setPage("app");
-      }} 
-      apiKey={apiKey} 
-      setApiKey={setApiKey} 
-    />
+    <LandingPage onStart={() => setPage("app")} />
   ) : (
-    <AppPage apiKey={apiKey} />
+    <AppPage />
   );
 }
 
