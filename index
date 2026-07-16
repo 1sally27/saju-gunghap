@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<title>친구 궁합 만세력</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState } = React;
+
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>친구 궁합 만세력 (AI 연동 버전)</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js" crossorigin></script>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/plain" id="app-source">
+const { useState, useMemo } = React;
+
+/* ================= 색상 토큰 ================= */
+const C = {
+  bg: "#FBF6EA",
+  card: "#FFFFFF",
+  cardAlt: "#FAF6EA",
+  border: "#EADFC2",
+  borderLight: "#F1EAD4",
+  ink: "#2C2740",
+  navy: "#2C2740",
+  navyText: "#FBF6EA",
+  muted: "#7A715A",
+  mutedLight: "#A89A72",
+  gold: "#B8905B",
+  goldBg: "#FAF3E1",
+  red: "#A83A2C",
+  dashed: "#C9B98F",
+};
+
+/* ================= 만세력 기본 데이터 & 엔진 ================= */
+const GAN = ["갑", "을", "병", "정", "무", "기", "경", "신", "임", "계"];
+const GAN_HANJA = ["甲", "乙", "丙", "丁", "戊", "己", "庚", "辛", "壬", "癸"];
+const GAN_OHENG = ["목", "목", "화", "화", "토", "토", "금", "금", "수", "수"];
+const JI = ["자", "축", "인", "묘", "진", "사", "오", "미", "신", "유", "술", "해"];
+const JI_HANJA = ["子", "丑", "寅", "卯", "辰", "巳", "午", "未", "申", "酉", "戌", "亥"];
+const JI_OHENG = ["수", "토", "목", "목", "토", "화", "화", "토", "금", "금", "토", "수"];
+
+const OHENG_COLOR = {
+  목: { bg: "#DCEAD9", text: "#3C6B45" },
+  화: { bg: "#F3DAD2", text: "#B0503A" },
+  토: { bg: "#F1E4C4", text: "#8C6A2A" },
+  금: { bg: "#E7E4DC", text: "#5C5A52" },
+  수: { bg: "#D9E4EE", text: "#3B5F80" },
+};
+
+const SOLAR_TERMS = [
+  { month: 1, day: 6, monthIdx: 11 }, { month: 2, day: 4, monthIdx: 0 },
+  { month: 3, day: 6, monthIdx: 1 }, { month: 4, day: 5, monthIdx: 2 },
+  { month: 5, day: 6, monthIdx: 3 }, { month: 6, day: 6, monthIdx: 4 },
+  { month: 7, day: 7, monthIdx: 5 }, { month: 8, day: 8, monthIdx: 6 },
+  { month: 9, day: 8, monthIdx: 7 }, { month: 10, day: 8, monthIdx: 8 },
+  { month: 11, day: 7, monthIdx: 9 }, { month: 12, day: 7, monthIdx: 10 },
+];
+
+function toJDN(y, m, d) {
+  const a = Math.floor((14 - m) / 12);
+  const yy = y + 4800 - a;
+  const mm = m + 12 * a - 3;
+  return (
+    d + Math.floor((153 * mm + 2) / 5) + 365 * yy +
+    Math.floor(yy / 4) - Math.floor(yy / 100) + Math.floor(yy / 400) - 32045
+  );
+}
+
+function getSajuYearAndMonthIdx(y, m, d) {
+  let sajuYear = y;
+  let monthIdx = 11;
+  for (let i = 0; i < SOLAR_TERMS.length; i++) {
+    const t = SOLAR_TERMS[i];
+    if (m > t.month || (m === t.month && d >= t.day)) monthIdx = t.monthIdx;
+  }
+  const beforeIpchun = m < 2 || (m === 2 && d < 4);
+  if (beforeIpchun) { sajuYear = y - 1; monthIdx = 11; }
+  return { sajuYear, monthIdx };
+}
+
+function getPillars(year, month, day, hour) {
+  const { sajuYear, monthIdx } = getSajuYearAndMonthIdx(year, month, day);
+  const yearGanIdx = ((((sajuYear - 4) % 10) + 10) % 10);
+  const yearJiIdx = ((((sajuYear - 4) % 12) + 12) % 12);
+  const yearGroup = yearGanIdx % 5;
+  const monthBaseStem = (yearGroup * 2 + 2) % 10;
+  const monthGanIdx = (monthBaseStem + monthIdx) % 10;
+  const monthJiSeq = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 0, 1];
+  const monthJiIdx = monthJiSeq[monthIdx];
+  const jdn = toJDN(year, month, day);
+  const dayGanIdx = (((jdn + 9) % 10) + 10) % 10;
+  const dayJiIdx = (((jdn + 1) % 12) + 12) % 12;
+
+  let hourJiIdx;
+  if (hour === 23 || hour === 0) hourJiIdx = 0;
+  else hourJiIdx = Math.floor((hour + 1) / 2) % 12;
+  const dayGroup = dayGanIdx % 5;
+  const hourBaseStem = (dayGroup * 2) % 10;
+  const hourGanIdx = (hourBaseStem + hourJiIdx) % 10;
+
+  return {
+    year: { gan: yearGanIdx, ji: yearJiIdx },
+    month: { gan: monthGanIdx, ji: monthJiIdx },
+    day: { gan: dayGanIdx, ji: dayJiIdx },
+    hour: { gan: hourGanIdx, ji: hourJiIdx },
+  };
+}
+
+const GEN_MAP = { 목: "화", 화: "토", 토: "금", 금: "수", 수: "목" };
+const CTRL_MAP = { 목: "토", 화: "금", 토: "수", 금: "목", 수: "화" };
+
+function getSipsin(dayGanIdx, targetGanIdx) {
+  const edm = GAN_OHENG[dayGanIdx];
+  const et = GAN_OHENG[targetGanIdx];
+  const sameYinYang = dayGanIdx % 2 === targetGanIdx % 2;
+  if (et === edm) return sameYinYang ? "비견" : "겁재";
+  if (GEN_MAP[edm] === et) return sameYinYang ? "식신" : "상관";
+  if (CTRL_MAP[edm] === et) return sameYinYang ? "편재" : "정재";
+  if (CTRL_MAP[et] === edm) return sameYinYang ? "편관" : "정관";
+  if (GEN_MAP[et] === edm) return sameYinYang ? "편인" : "정인";
+  return "-";
+}
+
+const SINSAL_GROUPS = [
+  { members: [8, 0, 4], dohwa: 9, yeokma: 2, hwagae: 4 },
+  { members: [2, 6, 10], dohwa: 3, yeokma: 8, hwagae: 10 },
+  { members: [5, 9, 1], dohwa: 6, yeokma: 11, hwagae: 1 },
+  { members: [11, 3, 7], dohwa: 0, yeokma: 5, hwagae: 7 },
+];
+
+function getSinsal(pillars) {
+  const group = SINSAL_GROUPS.find((g) => g.members.includes(pillars.day.ji));
+  if (!group) return [];
+  const branches = [pillars.year.ji, pillars.month.ji, pillars.day.ji, pillars.hour.ji];
+  const result = [];
+  if (branches.includes(group.dohwa)) result.push("도화살");
+  if (branches.includes(group.yeokma)) result.push("역마살");
+  if (branches.includes(group.hwagae)) result.push("화개살");
+  return result;
+}
+
+/* ================= Gemini API 연동 (해석 엔진) ================= */
+
+// 이름은 그대로 유지해야 기존 버튼들이 에러 없이 작동합니다.
+async function analyzeWithGemini(apiKey, names, pillarsList) { 
+  // Vercel 환경에서는 '/api' 호출이 곧 서버로 전달됩니다.
+  const response = await fetch("/api/analyze", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ names, pillarsList })
+  });
+  return response.json();
+}
+
+  const prompt = `너는 힙하고 통찰력 있는 사주/궁합 전문가야. 다음 사람들의 사주 원국(천간/지지)을 바탕으로 궁합과 케미를 분석해줘.
+대상자:
+${personInfo}
+
+${mode === "pair" ? 
+`두 사람의 일간, 일지, 오행 밸런스, 합충 등을 종합해 아래 JSON 형태로만 응답해. 부가 설명이나 마크다운 백틱(\`\`\`) 없이 순수 JSON 텍스트만 출력해.
+{
+  "relLabel": "일간 핵심 관계 (예: A -> B 상생, 비화 등 10자 내외)",
+  "categories": [
+    { "title": "평소에", "icon": "日", "summary": "요약 한줄", "detail": "상세 풀이 (3~4문장)" },
+    { "title": "밥", "icon": "食", "summary": "요약", "detail": "상세" },
+    { "title": "여행 갈 때", "icon": "旅", "summary": "요약", "detail": "상세" },
+    { "title": "일할 때", "icon": "職", "summary": "요약", "detail": "상세" },
+    { "title": "대화할 때", "icon": "談", "summary": "요약", "detail": "상세" },
+    { "title": "각자의 속마음", "icon": "心", "summary": "요약", "detail": "상세" },
+    { "title": "세상이 종말을 맞았을 때", "icon": "末", "summary": "요약", "detail": "상세" }
+  ]
+}` : 
+`여러 사람의 그룹 다이내믹을 분석해 아래 JSON 형태로만 응답해. 부가 설명이나 마크다운 백틱(\`\`\`) 없이 순수 JSON 텍스트만 출력해.
+{
+  "group": {
+    "roles": [ {"tag": "리더"}, {"tag": "아이디어뱅크"} ], // 인원수만큼 성향 태그 배열
+    "summary": "이 그룹의 핵심 다이내믹 요약",
+    "detail": "누가 누구와 자주 부딪히고, 누가 중재하는지 등 그룹 내 관계망 상세 설명"
+  },
+  "groupCategories": [
+    { "title": "평소에", "icon": "日", "summary": "요약", "detail": "상세" },
+    { "title": "밥", "icon": "食", "summary": "요약", "detail": "상세" },
+    { "title": "여행 갈 때", "icon": "旅", "summary": "요약", "detail": "상세" },
+    { "title": "일할 때", "icon": "職", "summary": "요약", "detail": "상세" },
+    { "title": "대화할 때", "icon": "談", "summary": "요약", "detail": "상세" },
+    { "title": "각자의 속마음", "icon": "心", "summary": "요약", "detail": "상세" },
+    { "title": "세상이 종말을 맞았을 때", "icon": "末", "summary": "요약", "detail": "상세" }
+  ]
+}`}`;
+
+  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      contents: [{ parts: [{ text: prompt }] }],
+      generationConfig: { responseMimeType: "application/json" }
+    })
+  });
+
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error?.message || "API 요청 실패");
+
+  let text = data.candidates[0].content.parts[0].text;
+  text = text.replace(/```json/g, "").replace(/```/g, "").trim();
+  const parsed = JSON.parse(text);
+  return { mode, names, pillarsList, ...parsed };
+}
+
+/* ================= UI 조각 ================= */
+
+const GANJI_HANJA = (gan, ji) => `${GAN_HANJA[gan]}${JI_HANJA[ji]}`;
+let uid = 100;
+const newId = () => uid++;
+
+function PillarChip({ gan, ji, label, sipsin }) {
+  const g = OHENG_COLOR[GAN_OHENG[gan]];
+  const j = OHENG_COLOR[JI_OHENG[ji]];
+  return (
+    <div className="flex flex-col items-center gap-1" style={{ minWidth: 48 }}>
+      <span className="text-xs" style={{ color: C.mutedLight, letterSpacing: "0.1em" }}>{label}</span>
+      {sipsin && <span className="text-xs font-semibold" style={{ color: C.gold }}>{sipsin}</span>}
+      <div className="flex flex-col rounded-lg overflow-hidden" style={{ border: `1px solid ${C.border}` }}>
+        <div className="flex items-center justify-center font-serif" style={{ width: 40, height: 40, fontSize: 17, background: g.bg, color: g.text }}>{GAN_HANJA[gan]}</div>
+        <div className="flex items-center justify-center font-serif" style={{ width: 40, height: 40, fontSize: 17, background: j.bg, color: j.text }}>{JI_HANJA[ji]}</div>
+      </div>
+    </div>
+  );
+}
+
+function GenderToggle({ value, onChange }) {
+  return (
+    <div className="flex gap-2">
+      {["여성", "남성"].map((g) => {
+        const selected = value === g;
+        return (
+          <button
+            key={g} type="button" onClick={() => onChange(g)}
+            className="flex-1 rounded-lg font-medium"
+            style={{
+              padding: "8px 0", fontSize: 12,
+              border: `1.5px solid ${selected ? C.navy : C.border}`,
+              background: selected ? C.navy : C.card,
+              color: selected ? C.navyText : C.muted,
+            }}
+          >
+            {g}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function FriendCard({ label, friend, onChange, onRemove, removable }) {
+  return (
+    <div className="rounded-2xl" style={{ background: C.card, border: `1px solid ${C.border}`, padding: 16 }}>
+      <div className="flex items-center justify-between mb-3">
+        <span className="text-xs font-semibold" style={{ color: C.gold, letterSpacing: "0.1em" }}>{label}</span>
+        {removable && (
+          <button type="button" onClick={onRemove} className="text-xs" style={{ color: C.red }}>삭제</button>
+        )}
+      </div>
+      <input
+        className="w-full outline-none mb-3 text-sm font-semibold"
+        style={{ background: "transparent", color: C.ink, borderBottom: `1px solid ${C.borderLight}`, paddingBottom: 6 }}
+        value={friend.name}
+        onChange={(e) => onChange({ ...friend, name: e.target.value })}
+        placeholder="이름을 입력하세요"
+      />
+      <div className="flex gap-2 mb-3">
+        <input
+          type="date" className="outline-none rounded-lg text-sm"
+          style={{ background: C.cardAlt, border: `1px solid ${C.border}`, color: C.ink, padding: "8px 8px", flex: "0 0 58%", minWidth: 0 }}
+          value={friend.date} onChange={(e) => onChange({ ...friend, date: e.target.value })}
+        />
+        <input
+          type="time" className="outline-none rounded-lg text-sm"
+          style={{ background: C.cardAlt, border: `1px solid ${C.border}`, color: C.ink, padding: "8px 8px", flex: "1 1 auto", minWidth: 118 }}
+          value={friend.time} onChange={(e) => onChange({ ...friend, time: e.target.value })}
+        />
+      </div>
+      <GenderToggle value={friend.gender} onChange={(g) => onChange({ ...friend, gender: g })} />
+    </div>
+  );
+}
+
+function CategoryCard({ data, open, onToggle }) {
+  return (
+    <div className="rounded-2xl overflow-hidden" style={{ background: C.card, border: `1px solid ${C.border}` }}>
+      <button type="button" onClick={onToggle} className="w-full flex items-center gap-3 text-left" style={{ padding: "16px" }}>
+        <span
+          className="flex items-center justify-center font-serif shrink-0"
+          style={{ width: 32, height: 32, borderRadius: "50%", background: C.goldBg, border: `1px solid ${C.border}`, color: C.gold, fontSize: 14 }}
+        >
+          {data.icon}
+        </span>
+        <div className="flex-1">
+          <div className="text-xs mb-1" style={{ color: C.mutedLight }}>{data.title}</div>
+          <div className="text-sm leading-snug" style={{ color: C.ink }}>{data.summary}</div>
+        </div>
+        <span className="shrink-0" style={{ color: C.dashed, transition: "transform 0.3s", transform: open ? "rotate(180deg)" : "rotate(0deg)" }}>
+          ▾
+        </span>
+      </button>
+      <div className="grid transition-all" style={{ gridTemplateRows: open ? "1fr" : "0fr", transitionDuration: "300ms" }}>
+        <div className="overflow-hidden">
+          <div className="text-sm leading-relaxed" style={{ padding: "12px 16px 16px 52px", color: C.muted, borderTop: `1px solid ${C.borderLight}` }}>
+            {data.detail}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PaywallCard({ onPay, paying }) {
+  return (
+    <div className="rounded-2xl text-center mb-6" style={{ background: C.navy, color: C.navyText, padding: 20 }}>
+      <div className="text-xs mb-2" style={{ color: "#c9bfa0", letterSpacing: "0.05em" }}>결과 확인하기</div>
+      <div className="font-serif text-xl mb-4">궁합 풀이가 준비됐어요</div>
+      <button
+        type="button" onClick={onPay} disabled={paying}
+        className="w-full rounded-xl font-semibold"
+        style={{ padding: "13px 0", fontSize: 14, background: C.red, color: "#ffffff", opacity: paying ? 0.7 : 1 }}
+      >
+        {paying ? "AI가 열심히 사주를 푸는 중..." : "결과보기 (AI 분석 시작)"}
+      </button>
+    </div>
+  );
+}
+
+/* ================= 랜딩 페이지 ================= */
+
+function LandingPage({ onPay, apiKey, setApiKey }) {
+  const features = [
+    { icon: "命", title: "정밀 만세력 계산", desc: "생년월일시를 입력하면 년·월·일·시 사주를 바로 뽑아드려요." },
+    { icon: "友", title: "친구 무제한 추가", desc: "둘이든 셋이든 다섯이든, 우리 무리 전체 궁합을 한 곳에서." },
+    { icon: "話", title: "상황별 궁합 풀이", desc: "밥 먹을 때, 여행 갈 때, 대화할 때… 상황마다 다른 케미를 AI가 콕 집어드려요." },
+  ];
+  return (
+    <div className="min-h-screen w-full font-sans" style={{ background: C.bg, color: C.ink }}>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Song+Myung&family=Noto+Sans+KR:wght@400;500;600;700&display=swap');
+        .font-serif { font-family: 'Song Myung', serif; }
+        .font-sans { font-family: 'Noto Sans KR', sans-serif; }
+      `}</style>
+      <div className="max-w-md mx-auto px-5" style={{ paddingTop: 64, paddingBottom: 56 }}>
+        <div className="text-center mb-10">
+          <div className="text-xs mb-3" style={{ color: C.gold, letterSpacing: "0.3em" }}>SAJU GUNGHAP AI</div>
+          <h1 className="font-serif text-3xl leading-tight mb-3">우리 관계는<br />무슨 사이일까?</h1>
+          <p className="text-sm leading-relaxed" style={{ color: C.muted }}>생년월일시 몇 줄이면 충분해요.<br />AI 만세력 엔진이 딥하게 풀어드릴게요.</p>
+        </div>
+
+        <div className="mb-6">
+          <input
+            type="text"
+            placeholder="Gemini API Key를 입력해주세요"
+            className="w-full rounded-xl text-sm outline-none"
+            style={{ background: C.card, border: `1px solid ${C.border}`, color: C.ink, padding: "14px 16px" }}
+            value={apiKey}
+            onChange={(e) => setApiKey(e.target.value)}
+          />
+          <p className="text-xs mt-2 text-center" style={{ color: C.mutedLight }}>API Key는 브라우저에만 유지되며 서버로 전송되지 않습니다.</p>
+        </div>
+
+        <div className="flex flex-col gap-3 mb-8">
+          {features.map((f, i) => (
+            <div key={i} className="flex items-start gap-3 rounded-2xl" style={{ background: C.card, border: `1px solid ${C.border}`, padding: 16 }}>
+              <span className="flex items-center justify-center font-serif shrink-0" style={{ width: 36, height: 36, borderRadius: "50%", background: C.goldBg, border: `1px solid ${C.border}`, color: C.gold }}>{f.icon}</span>
+              <div>
+                <div className="text-sm font-semibold mb-1">{f.title}</div>
+                <div className="text-xs leading-relaxed" style={{ color: C.muted }}>{f.desc}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <button
+          type="button" onClick={onPay}
+          className="w-full rounded-2xl font-semibold"
+          style={{ padding: "16px 0", fontSize: 15, background: C.red, color: "#ffffff", letterSpacing: "0.02em" }}
+        >
+          궁합 보기 시작
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ================= 메인 앱 페이지 ================= */
+
+function AppPage({ apiKey }) {
+  const [friends, setFriends] = useState([
+    { id: newId(), name: "", date: "1996-05-14", time: "09:30", gender: "여성" },
+    { id: newId(), name: "", date: "1997-11-02", time: "21:10", gender: "남성" },
+  ]);
+  const [openIdx, setOpenIdx] = useState(0);
+  const [confirmed, setConfirmed] = useState(false);
+  const [paid, setPaid] = useState(false);
+  const [paying, setPaying] = useState(false);
+  const [result, setResult] = useState(null);
+
+  const handlePay = async () => {
+    setPaying(true);
+    try {
+      const names = friends.map((f, i) => (f.name && f.name.trim() ? f.name.trim() : i === 0 ? "나" : `친구${i}`));
+      const pillarsList = friends.map((f) => {
+        const [y, m, d] = f.date.split("-").map(Number);
+        const [hh] = f.time.split(":").map(Number);
+        return getPillars(y, m, d, hh);
+      });
+      const aiResult = await analyzeWithGemini(apiKey, names, pillarsList);
+      setResult(aiResult);
+      setPaid(true);
+    } catch (e) {
+      alert("AI 분석 중 오류가 발생했습니다. API Key나 네트워크 상태를 확인해주세요.\n\n" + e.message);
+      setConfirmed(false);
+    }
+    setPaying(false);
+  };
+
+  const updateFriend = (id, updated) => { setFriends(friends.map((f) => (f.id === id ? updated : f))); setConfirmed(false); };
+  const removeFriend = (id) => { setFriends(friends.filter((f) => f.id !== id)); setConfirmed(false); };
+  const addFriend = () => { setFriends([...friends, { id: newId(), name: "", date: "1998-01-01", time: "12:00", gender: "여성" }]); setConfirmed(false); };
+
+  return (
+    <div className="min-h-screen w-full font-sans" style={{ background: C.bg, color: C.ink, paddingBottom: 48 }}>
+      <div className="max-w-md mx-auto px-4" style={{ paddingTop: 32 }}>
+        <div className="text-center mb-6">
+          <div className="text-xs mb-1" style={{ color: C.gold, letterSpacing: "0.3em" }}>SAJU GUNGHAP AI</div>
+          <h1 className="font-serif text-2xl">친구 궁합 만세력</h1>
+        </div>
+
+        {/* 친구 입력 */}
+        <div className="flex flex-col gap-3 mb-3">
+          {friends.map((f, i) => (
+            <FriendCard
+              key={f.id} label={i === 0 ? "나" : `친구 ${i}`} friend={f}
+              onChange={(updated) => updateFriend(f.id, updated)}
+              onRemove={() => removeFriend(f.id)} removable={friends.length > 2}
+            />
+          ))}
+          <button
+            type="button" onClick={addFriend}
+            className="rounded-2xl w-full flex items-center justify-center gap-2 font-medium"
+            style={{ padding: "16px", border: `1.5px dashed ${C.dashed}`, color: C.gold, background: C.goldBg, fontSize: 14 }}
+          >
+            <span className="font-serif text-lg">＋</span> 친구 추가하기
+          </button>
+        </div>
+
+        {friends.length < 2 ? (
+          <div className="text-center text-sm py-10" style={{ color: C.mutedLight }}>궁합을 보려면 나 포함 2명 이상 필요해요.</div>
+        ) : (
+          <>
+            {!confirmed && (
+              <button
+                type="button" onClick={() => setConfirmed(true)}
+                className="w-full rounded-xl font-semibold mb-6"
+                style={{ padding: "14px 0", fontSize: 15, background: C.navy, color: C.navyText }}
+              >
+                입력완료 · 궁합 확인하기
+              </button>
+            )}
+
+            {confirmed && !paid && <PaywallCard onPay={handlePay} paying={paying} />}
+
+            {paid && result && (
+              <>
+                <div className="rounded-2xl mb-4" style={{ background: C.card, border: `1px solid ${C.border}`, padding: 16 }}>
+                  <div className="text-xs font-semibold mb-3" style={{ color: C.mutedLight, letterSpacing: "0.1em" }}>사주 원국 (AI 분석 기준)</div>
+                  {result.pillarsList.map((p, i) => {
+                    const sinsal = getSinsal(p);
+                    return (
+                      <div key={i}>
+                        {i > 0 && <div style={{ height: 1, background: C.borderLight, margin: "12px 0" }} />}
+                        <div className="text-xs mb-2" style={{ color: C.mutedLight }}>{result.names[i]}</div>
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex gap-2">
+                            <PillarChip gan={p.hour.gan} ji={p.hour.ji} label="시" sipsin={getSipsin(p.day.gan, p.hour.gan)} />
+                            <PillarChip gan={p.day.gan} ji={p.day.ji} label="일" sipsin="일간" />
+                            <PillarChip gan={p.month.gan} ji={p.month.ji} label="월" sipsin={getSipsin(p.day.gan, p.month.gan)} />
+                            <PillarChip gan={p.year.gan} ji={p.year.ji} label="년" sipsin={getSipsin(p.day.gan, p.year.gan)} />
+                          </div>
+                          <div className="flex flex-col items-end gap-1.5 shrink-0" style={{ paddingTop: 20 }}>
+                            {sinsal.length > 0 ? sinsal.map((s, k) => (
+                              <span key={k} className="text-xs font-medium rounded-full" style={{ padding: "3px 9px", background: C.goldBg, border: `1px solid ${C.border}`, color: C.gold }}>{s}</span>
+                            )) : <span className="text-xs" style={{ color: C.dashed }}>해당 신살 없음</span>}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {result.mode === "pair" ? (
+                  <>
+                    <div className="rounded-2xl text-center mb-6" style={{ background: C.navy, color: C.navyText, padding: 20 }}>
+                      <div className="text-xs mb-2" style={{ color: "#c9bfa0", letterSpacing: "0.05em" }}>일간 핵심 관계</div>
+                      <div className="font-serif text-xl mb-1">
+                        {GANJI_HANJA(result.pillarsList[0].day.gan, result.pillarsList[0].day.ji)} · {GANJI_HANJA(result.pillarsList[1].day.gan, result.pillarsList[1].day.ji)}
+                      </div>
+                      <div className="text-sm" style={{ color: C.gold }}>{result.relLabel}</div>
+                    </div>
+                    <div className="text-xs mb-2 px-1" style={{ color: C.mutedLight, letterSpacing: "0.1em" }}>AI 맞춤 항목별 궁합</div>
+                    <div className="flex flex-col gap-3">
+                      {result.categories.map((c, i) => (
+                        <CategoryCard key={i} data={c} open={openIdx === i} onToggle={() => setOpenIdx(openIdx === i ? -1 : i)} />
+                      ))}
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="rounded-2xl text-center mb-6" style={{ background: C.navy, padding: 20 }}>
+                      <div className="text-xs mb-3" style={{ color: "#c9bfa0", letterSpacing: "0.1em" }}>
+                        {friends.length}명 총궁합 (AI 분석)
+                      </div>
+                      <div className="flex flex-wrap justify-center gap-2 mb-4">
+                        {result.names.map((name, i) => (
+                          <span key={i} className="text-xs rounded-full" style={{ padding: "5px 10px", background: "rgba(255,255,255,0.08)", color: C.navyText }}>
+                            {name} · {result.group.roles[i]?.tag || "멤버"}
+                          </span>
+                        ))}
+                      </div>
+                      <div className="text-base font-semibold" style={{ color: C.gold }}>{result.group.summary}</div>
+                      <div className="text-xs mt-3 leading-relaxed" style={{ color: "#c9bfa0" }}>{result.group.detail}</div>
+                    </div>
+                    <div className="text-xs mb-2 px-1" style={{ color: C.mutedLight, letterSpacing: "0.1em" }}>AI 맞춤 항목별 궁합</div>
+                    <div className="flex flex-col gap-3">
+                      {result.groupCategories.map((c, i) => (
+                        <CategoryCard key={i} data={c} open={openIdx === i} onToggle={() => setOpenIdx(openIdx === i ? -1 : i)} />
+                      ))}
+                    </div>
+                  </>
+                )}
+              </>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ================= 루트 ================= */
+
+function App() {
+  const [page, setPage] = useState("landing");
+  const [apiKey, setApiKey] = useState("");
+
+  return page === "landing" ? (
+    <LandingPage 
+      onPay={() => {
+        if(!apiKey.trim()) { alert("Gemini API Key를 입력해주세요."); return; }
+        setPage("app");
+      }} 
+      apiKey={apiKey} 
+      setApiKey={setApiKey} 
+    />
+  ) : (
+    <AppPage apiKey={apiKey} />
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+<script>
+  (function () {
+    var code = document.getElementById("app-source").textContent;
+    var output = Babel.transform(code, {
+      presets: [["react", { runtime: "classic" }]],
+    }).code;
+    var script = document.createElement("script");
+    script.textContent = output;
+    document.body.appendChild(script);
+  })();
+</script>
+</body>
+</html>
+
+
