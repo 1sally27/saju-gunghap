@@ -1,33 +1,39 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-<meta charset="UTF-8" />
-<title>친구 궁합 만세력</title>
-<script src="https://cdn.tailwindcss.com"></script>
-<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>친구 궁합 만세력</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 </head>
 <body>
-<div id="root"></div>
-<script type="text/babel">
-const { useState } = React;
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState } = React;
 
-<!DOCTYPE html>
-<html lang="ko">
-<head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>친구 궁합 만세력 (AI 연동 버전)</title>
-<script src="https://cdn.tailwindcss.com"></script>
-<script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
-<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
-<script src="https://unpkg.com/@babel/standalone/babel.min.js" crossorigin></script>
-</head>
-<body>
-<div id="root"></div>
-<script type="text/plain" id="app-source">
-const { useState, useMemo } = React;
+    // 핵심 수정: API 호출을 서버(/api/...)가 아닌 직접 Gemini로 보내도록 수정했습니다.
+    async function analyzeWithGemini(apiKey, names, pillarsList) {
+      const mode = pillarsList.length === 2 ? "pair" : "group";
+      const personInfo = names.map((name, i) => `${name}: ${JSON.stringify(pillarsList[i])}`).join("\n");
+      
+      const prompt = `너는 힙한 궁합 전문가야. 다음 사람들의 사주 원국(천간/지지)을 바탕으로 궁합을 분석해줘.
+      대상자: ${personInfo}
+      ${mode === "pair" ? 
+      'JSON 형식: {"relLabel": "...", "categories": [{"title": "...", "icon": "...", "summary": "...", "detail": "..."}]}' :
+      'JSON 형식: {"group": {"roles": [{"tag": "..."},...], "summary": "...", "detail": "..."}, "groupCategories": [...] }'}`;
+
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { responseMimeType: "application/json" } })
+      });
+      const data = await res.json();
+      const text = data.candidates[0].content.parts[0].text.replace(/```json/g, "").replace(/```/g, "").trim();
+      return { mode, names, pillarsList, ...JSON.parse(text) };
+    }
 
 /* ================= 색상 토큰 ================= */
 const C = {
