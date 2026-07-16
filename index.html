@@ -145,7 +145,7 @@ function getSinsal(pillars) {
 
 // API 키 없이 Vercel 백엔드(/api/analyze)로 데이터만 보냅니다.
 async function analyzeWithGemini(names, pillarsList) { 
-  const response = await fetch("/api", {
+  const response = await fetch("/api/analyze", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ names, pillarsList })
