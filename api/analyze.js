@@ -180,7 +180,6 @@ module.exports = async (req, res) => {
       ? body.names.map((name, index) => String(name || `멤버 ${index + 1}`).trim())
       : [];
     const pillarsList = Array.isArray(body.pillarsList) ? body.pillarsList : [];
-    const sinsalList = Array.isArray(body.sinsalList) ? body.sinsalList : [];
 
     if (pillarsList.length < 2 || !pillarsList.every(isValidPillar)) {
       return res.status(400).json({
@@ -206,7 +205,6 @@ module.exports = async (req, res) => {
 분석 모드: ${mode === "pair" ? "2인 궁합" : `${pillarsList.length}인 그룹 궁합`}
 이름 순서: ${JSON.stringify(safeNames)}
 사주 원국: ${JSON.stringify(readablePillars)}
-주요 신살 계산 결과: ${JSON.stringify(sinsalList)}
 
 출력 규칙:
 - 반드시 지정된 JSON 스키마에 맞는 JSON만 반환한다.
