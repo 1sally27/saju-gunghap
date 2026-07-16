@@ -6,7 +6,7 @@ const CATEGORY_DEFS = [
   { title: "밥 먹을 때", icon: "食" },
   { title: "여행 갈 때", icon: "旅" },
   { title: "대화할 때", icon: "話" },
-  { title: "속마음", icon: "心" },
+  { title: "서로의 속마음", icon: "心" },
   { title: "일할 때", icon: "事" },
   { title: "세상이 종말을 맞았을 때", icon: "末" },
 ];
@@ -289,7 +289,7 @@ module.exports = async (req, res) => {
 2. 밥 먹을 때
 3. 여행 갈 때
 4. 대화할 때
-5. 속마음
+5. 서로의 속마음
 6. 일할 때
 7. 세상이 종말을 맞았을 때
 
