@@ -12,26 +12,9 @@
 <body>
   <div id="root"></div>
 
-  <!-- 여기에 코드를 다 넣었습니다 -->
   <script type="text/babel">
     const { useState, useMemo } = React;
 
-    // 1. 함수는 단 한 번만 정의
-    async function analyzeWithGemini(apiKey, names, pillarsList) {
-      const mode = pillarsList.length === 2 ? "pair" : "group";
-      const personInfo = names.map((name, i) => `${name}: ${JSON.stringify(pillarsList[i])}`).join("\n");
-      const prompt = `너는 전문가야. 대상자: ${personInfo}. JSON으로 답해줘.`;
-
-      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { responseMimeType: "application/json" } })
-      });
-      const data = await res.json();
-      const text = data.candidates[0].content.parts[0].text.replace(/```json/g, "").replace(/```/g, "").trim();
-      return { mode, names, pillarsList, ...JSON.parse(text) };
-    }
-    
 /* ================= 색상 토큰 ================= */
 const C = {
   bg: "#FBF6EA",
@@ -160,23 +143,19 @@ function getSinsal(pillars) {
 
 /* ================= Gemini API 연동 (해석 엔진) ================= */
 
-// 이름은 그대로 유지해야 기존 버튼들이 에러 없이 작동합니다.
+// 단 하나로 묶인 API 호출 함수 (프롬프트 포함)
 async function analyzeWithGemini(apiKey, names, pillarsList) { 
-  // Vercel 환경에서는 '/api' 호출이 곧 서버로 전달됩니다.
-  const response = await fetch("/api/analyze", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ names, pillarsList })
-  });
-  return response.json();
-}
-
-  const prompt = `너는 힙하고 통찰력 있는 사주/궁합 전문가야. 다음 사람들의 사주 원국(천간/지지)을 바탕으로 궁합과 케미를 분석해줘.
+  const mode = pillarsList.length === 2 ? "pair" : "group";
+  const personInfo = names.map((name, i) => `${name}: ${JSON.stringify(pillarsList[i])}`).join("\n");
+  
+  let prompt = `너는 힙하고 통찰력 있는 사주/궁합 전문가야. 다음 사람들의 사주 원국(천간/지지)을 바탕으로 궁합과 케미를 분석해줘.
 대상자:
 ${personInfo}
 
-${mode === "pair" ? 
-`두 사람의 일간, 일지, 오행 밸런스, 합충 등을 종합해 아래 JSON 형태로만 응답해. 부가 설명이나 마크다운 백틱(\`\`\`) 없이 순수 JSON 텍스트만 출력해.
+`;
+
+  if (mode === "pair") {
+    prompt += `두 사람의 일간, 일지, 오행 밸런스, 합충 등을 종합해 아래 JSON 형태로만 응답해. 부가 설명이나 마크다운 백틱(\`\`\`) 없이 순수 JSON 텍스트만 출력해.
 {
   "relLabel": "일간 핵심 관계 (예: A -> B 상생, 비화 등 10자 내외)",
   "categories": [
@@ -188,8 +167,9 @@ ${mode === "pair" ?
     { "title": "각자의 속마음", "icon": "心", "summary": "요약", "detail": "상세" },
     { "title": "세상이 종말을 맞았을 때", "icon": "末", "summary": "요약", "detail": "상세" }
   ]
-}` : 
-`여러 사람의 그룹 다이내믹을 분석해 아래 JSON 형태로만 응답해. 부가 설명이나 마크다운 백틱(\`\`\`) 없이 순수 JSON 텍스트만 출력해.
+}`;
+  } else {
+    prompt += `여러 사람의 그룹 다이내믹을 분석해 아래 JSON 형태로만 응답해. 부가 설명이나 마크다운 백틱(\`\`\`) 없이 순수 JSON 텍스트만 출력해.
 {
   "group": {
     "roles": [ {"tag": "리더"}, {"tag": "아이디어뱅크"} ], // 인원수만큼 성향 태그 배열
@@ -205,7 +185,8 @@ ${mode === "pair" ?
     { "title": "각자의 속마음", "icon": "心", "summary": "요약", "detail": "상세" },
     { "title": "세상이 종말을 맞았을 때", "icon": "末", "summary": "요약", "detail": "상세" }
   ]
-}`}`;
+}`;
+  }
 
   const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
     method: "POST",
@@ -582,19 +563,6 @@ function App() {
 }
 
 ReactDOM.createRoot(document.getElementById("root")).render(<App />);
-</script>
-<script>
-  (function () {
-    var code = document.getElementById("app-source").textContent;
-    var output = Babel.transform(code, {
-      presets: [["react", { runtime: "classic" }]],
-    }).code;
-    var script = document.createElement("script");
-    script.textContent = output;
-    document.body.appendChild(script);
-  })();
-</script>
+  </script>
 </body>
 </html>
-
-
