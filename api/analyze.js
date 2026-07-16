@@ -10,7 +10,7 @@ const CATEGORY_DEFS = [
   { title: "일할 때", icon: "事" },
   { title: "세상이 종말을 맞았을 때", icon: "末" },
 ];
-
+이거지워주기
 function safeJsonBody(body) {
   if (!body) return {};
   if (typeof body === "string") {
