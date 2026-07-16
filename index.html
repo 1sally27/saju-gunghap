@@ -144,23 +144,115 @@ function getSinsal(pillars) {
 /* ================= Vercel API 연동 (API 키 노출 X) ================= */
 
 // API 키 없이 Vercel 백엔드(/api/analyze)로 데이터만 보냅니다.
-async function analyzeWithGemini(names, pillarsList) { 
+async function analyzeWithGemini(names, pillarsList) {
   const response = await fetch("/api/analyze", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ names, pillarsList })
   });
 
-  if (!response.ok) {
-    throw new Error("서버에서 에러가 발생했습니다.");
+  // response.json()만 바로 호출하면 서버가 HTML/빈 문자열을 보냈을 때
+  // 원인을 알기 어려운 JSON 파싱 오류가 나므로 먼저 문자열로 확인합니다.
+  const responseText = await response.text();
+  let responseData = null;
+
+  if (responseText) {
+    try {
+      responseData = JSON.parse(responseText);
+    } catch (error) {
+      console.error("JSON이 아닌 서버 응답:", responseText);
+      throw new Error("서버 응답이 JSON 형식이 아닙니다. Vercel Function 로그를 확인해주세요.");
+    }
   }
 
-  return response.json();
+  if (!response.ok) {
+    const serverMessage = responseData?.error || responseData?.message;
+    throw new Error(serverMessage || `서버에서 오류가 발생했습니다. (${response.status})`);
+  }
+
+  if (!responseData) {
+    throw new Error("서버에서 빈 응답을 받았습니다.");
+  }
+
+  return responseData;
+}
+
+// Vercel API가 { data: {...} }, { result: {...} }, {...}, 또는 배열을 보내도
+// 프론트 화면에서 사용할 수 있는 동일한 형태로 정리합니다.
+function normalizeAnalysisResult(rawResult, fallbackNames, fallbackPillarsList) {
+  let data = rawResult;
+
+  if (data && !Array.isArray(data) && typeof data === "object") {
+    if (data.data && typeof data.data === "object") data = data.data;
+    else if (data.result && typeof data.result === "object") data = data.result;
+  }
+
+  const fallbackMode = fallbackNames.length === 2 ? "pair" : "group";
+
+  // API가 항목 배열만 반환한 경우도 화면이 멈추지 않도록 처리합니다.
+  if (Array.isArray(data)) {
+    data = fallbackMode === "pair"
+      ? { mode: "pair", categories: data }
+      : { mode: "group", groupCategories: data };
+  }
+
+  if (!data || typeof data !== "object") {
+    console.error("올바르지 않은 API 응답:", rawResult);
+    throw new Error("분석 결과의 데이터 형식이 올바르지 않습니다.");
+  }
+
+  // analyze.js가 Gemini 원본 응답(candidates)을 그대로 반환하면
+  // 프론트에서 categories/pillarsList를 찾을 수 없으므로 명확한 오류를 냅니다.
+  if (Array.isArray(data.candidates)) {
+    console.error("Gemini 원본 응답이 그대로 전달됨:", rawResult);
+    throw new Error("서버 응답 변환이 필요합니다. 수정된 api/analyze.js 파일도 함께 배포해주세요.");
+  }
+
+  const names = Array.isArray(data.names) && data.names.length > 0
+    ? data.names
+    : fallbackNames;
+
+  const pillarsList = Array.isArray(data.pillarsList) && data.pillarsList.length > 0
+    ? data.pillarsList
+    : fallbackPillarsList;
+
+  const mode = data.mode === "pair" || data.mode === "group"
+    ? data.mode
+    : fallbackMode;
+
+  const categories = Array.isArray(data.categories) ? data.categories : [];
+  const groupCategories = Array.isArray(data.groupCategories) ? data.groupCategories : [];
+  const group = data.group && typeof data.group === "object" ? data.group : {};
+  const roles = Array.isArray(group.roles) ? group.roles : [];
+
+  const normalized = {
+    ...data,
+    names,
+    pillarsList,
+    mode,
+    categories,
+    groupCategories,
+    relLabel: typeof data.relLabel === "string" ? data.relLabel : "두 사람의 관계를 분석했어요",
+    group: {
+      ...group,
+      roles,
+      summary: typeof group.summary === "string" ? group.summary : "우리 무리의 관계를 분석했어요",
+      detail: typeof group.detail === "string" ? group.detail : "항목별 결과를 아래에서 확인해주세요.",
+    },
+  };
+
+  console.log("원본 API 응답:", rawResult);
+  console.log("화면용 정리 결과:", normalized);
+  return normalized;
 }
 
 /* ================= UI 조각 ================= */
 
-const GANJI_HANJA = (gan, ji) => `${GAN_HANJA[gan]}${JI_HANJA[ji]}`;
+const GANJI_HANJA = (gan, ji) => {
+  const ganText = Number.isInteger(gan) ? GAN_HANJA[gan] : "?";
+  const jiText = Number.isInteger(ji) ? JI_HANJA[ji] : "?";
+  return `${ganText || "?"}${jiText || "?"}`;
+};
 let uid = 100;
 const newId = () => uid++;
 
@@ -221,12 +313,12 @@ function FriendCard({ label, friend, onChange, onRemove, removable }) {
       />
       <div className="flex gap-2 mb-3">
         <input
-          type="date" className="outline-none rounded-lg text-sm"
+          type="date" required className="outline-none rounded-lg text-sm"
           style={{ background: C.cardAlt, border: `1px solid ${C.border}`, color: C.ink, padding: "8px 8px", flex: "0 0 58%", minWidth: 0 }}
           value={friend.date} onChange={(e) => onChange({ ...friend, date: e.target.value })}
         />
         <input
-          type="time" className="outline-none rounded-lg text-sm"
+          type="time" required className="outline-none rounded-lg text-sm"
           style={{ background: C.cardAlt, border: `1px solid ${C.border}`, color: C.ink, padding: "8px 8px", flex: "1 1 auto", minWidth: 118 }}
           value={friend.time} onChange={(e) => onChange({ ...friend, time: e.target.value })}
         />
@@ -340,29 +432,68 @@ function AppPage() {
   const [paying, setPaying] = useState(false);
   const [result, setResult] = useState(null);
 
+  const resetAnalysis = () => {
+    setConfirmed(false);
+    setPaid(false);
+    setResult(null);
+    setOpenIdx(0);
+  };
+
   const handlePay = async () => {
     setPaying(true);
     try {
-      const names = friends.map((f, i) => (f.name && f.name.trim() ? f.name.trim() : i === 0 ? "나" : `친구${i}`));
-      const pillarsList = friends.map((f) => {
+      const names = friends.map((f, i) => (
+        f.name && f.name.trim() ? f.name.trim() : i === 0 ? "나" : `친구${i}`
+      ));
+
+      const pillarsList = friends.map((f, i) => {
+        if (!f.date || !f.time) {
+          throw new Error(`${i === 0 ? "나" : `친구 ${i}`}의 생년월일과 시간을 모두 입력해주세요.`);
+        }
+
         const [y, m, d] = f.date.split("-").map(Number);
         const [hh] = f.time.split(":").map(Number);
+
+        if (![y, m, d, hh].every(Number.isFinite)) {
+          throw new Error(`${i === 0 ? "나" : `친구 ${i}`}의 날짜 또는 시간 형식이 올바르지 않습니다.`);
+        }
+
         return getPillars(y, m, d, hh);
       });
+
       // API 키 없이 백엔드로 전송
-      const aiResult = await analyzeWithGemini(names, pillarsList);
+      const rawAiResult = await analyzeWithGemini(names, pillarsList);
+      const aiResult = normalizeAnalysisResult(rawAiResult, names, pillarsList);
+
       setResult(aiResult);
       setPaid(true);
     } catch (e) {
-      alert("AI 분석 중 오류가 발생했습니다. Vercel 서버 상태를 확인해주세요.\n\n" + e.message);
-      setConfirmed(false);
+      console.error("AI 분석 오류:", e);
+      alert("AI 분석 중 오류가 발생했습니다.\n\n" + e.message);
+      setPaid(false);
+      setResult(null);
+    } finally {
+      setPaying(false);
     }
-    setPaying(false);
   };
 
-  const updateFriend = (id, updated) => { setFriends(friends.map((f) => (f.id === id ? updated : f))); setConfirmed(false); };
-  const removeFriend = (id) => { setFriends(friends.filter((f) => f.id !== id)); setConfirmed(false); };
-  const addFriend = () => { setFriends([...friends, { id: newId(), name: "", date: "1998-01-01", time: "12:00", gender: "여성" }]); setConfirmed(false); };
+  const updateFriend = (id, updated) => {
+    setFriends((prev) => prev.map((f) => (f.id === id ? updated : f)));
+    resetAnalysis();
+  };
+
+  const removeFriend = (id) => {
+    setFriends((prev) => prev.filter((f) => f.id !== id));
+    resetAnalysis();
+  };
+
+  const addFriend = () => {
+    setFriends((prev) => [
+      ...prev,
+      { id: newId(), name: "", date: "1998-01-01", time: "12:00", gender: "여성" },
+    ]);
+    resetAnalysis();
+  };
 
   return (
     <div className="min-h-screen w-full font-sans" style={{ background: C.bg, color: C.ink, paddingBottom: 48 }}>
@@ -410,12 +541,12 @@ function AppPage() {
               <>
                 <div className="rounded-2xl mb-4" style={{ background: C.card, border: `1px solid ${C.border}`, padding: 16 }}>
                   <div className="text-xs font-semibold mb-3" style={{ color: C.mutedLight, letterSpacing: "0.1em" }}>사주 원국 (AI 분석 기준)</div>
-                  {result.pillarsList.map((p, i) => {
+                  {result?.pillarsList?.map((p, i) => {
                     const sinsal = getSinsal(p);
                     return (
                       <div key={i}>
                         {i > 0 && <div style={{ height: 1, background: C.borderLight, margin: "12px 0" }} />}
-                        <div className="text-xs mb-2" style={{ color: C.mutedLight }}>{result.names[i]}</div>
+                        <div className="text-xs mb-2" style={{ color: C.mutedLight }}>{result?.names?.[i] || `멤버 ${i + 1}`}</div>
                         <div className="flex items-start justify-between gap-2">
                           <div className="flex gap-2">
                             <PillarChip gan={p.hour.gan} ji={p.hour.ji} label="시" sipsin={getSipsin(p.day.gan, p.hour.gan)} />
@@ -439,15 +570,19 @@ function AppPage() {
                     <div className="rounded-2xl text-center mb-6" style={{ background: C.navy, color: C.navyText, padding: 20 }}>
                       <div className="text-xs mb-2" style={{ color: "#c9bfa0", letterSpacing: "0.05em" }}>일간 핵심 관계</div>
                       <div className="font-serif text-xl mb-1">
-                        {GANJI_HANJA(result.pillarsList[0].day.gan, result.pillarsList[0].day.ji)} · {GANJI_HANJA(result.pillarsList[1].day.gan, result.pillarsList[1].day.ji)}
+                        {GANJI_HANJA(result?.pillarsList?.[0]?.day?.gan, result?.pillarsList?.[0]?.day?.ji)} · {GANJI_HANJA(result?.pillarsList?.[1]?.day?.gan, result?.pillarsList?.[1]?.day?.ji)}
                       </div>
                       <div className="text-sm" style={{ color: C.gold }}>{result.relLabel}</div>
                     </div>
                     <div className="text-xs mb-2 px-1" style={{ color: C.mutedLight, letterSpacing: "0.1em" }}>AI 맞춤 항목별 궁합</div>
                     <div className="flex flex-col gap-3">
-                      {result.categories.map((c, i) => (
+                      {result?.categories?.length > 0 ? result.categories.map((c, i) => (
                         <CategoryCard key={i} data={c} open={openIdx === i} onToggle={() => setOpenIdx(openIdx === i ? -1 : i)} />
-                      ))}
+                      )) : (
+                        <div className="rounded-2xl text-sm text-center" style={{ padding: 18, background: C.card, border: `1px solid ${C.border}`, color: C.muted }}>
+                          AI가 항목별 궁합 배열을 보내지 않았어요. 개발자 도구의 Console에서 원본 API 응답을 확인해주세요.
+                        </div>
+                      )}
                     </div>
                   </>
                 ) : (
@@ -457,20 +592,24 @@ function AppPage() {
                         {friends.length}명 총궁합 (AI 분석)
                       </div>
                       <div className="flex flex-wrap justify-center gap-2 mb-4">
-                        {result.names.map((name, i) => (
+                        {result?.names?.map((name, i) => (
                           <span key={i} className="text-xs rounded-full" style={{ padding: "5px 10px", background: "rgba(255,255,255,0.08)", color: C.navyText }}>
-                            {name} · {result.group.roles[i]?.tag || "멤버"}
+                            {name} · {result?.group?.roles?.[i]?.tag || "멤버"}
                           </span>
                         ))}
                       </div>
-                      <div className="text-base font-semibold" style={{ color: C.gold }}>{result.group.summary}</div>
-                      <div className="text-xs mt-3 leading-relaxed" style={{ color: "#c9bfa0" }}>{result.group.detail}</div>
+                      <div className="text-base font-semibold" style={{ color: C.gold }}>{result?.group?.summary}</div>
+                      <div className="text-xs mt-3 leading-relaxed" style={{ color: "#c9bfa0" }}>{result?.group?.detail}</div>
                     </div>
                     <div className="text-xs mb-2 px-1" style={{ color: C.mutedLight, letterSpacing: "0.1em" }}>AI 맞춤 항목별 궁합</div>
                     <div className="flex flex-col gap-3">
-                      {result.groupCategories.map((c, i) => (
+                      {result?.groupCategories?.length > 0 ? result.groupCategories.map((c, i) => (
                         <CategoryCard key={i} data={c} open={openIdx === i} onToggle={() => setOpenIdx(openIdx === i ? -1 : i)} />
-                      ))}
+                      )) : (
+                        <div className="rounded-2xl text-sm text-center" style={{ padding: 18, background: C.card, border: `1px solid ${C.border}`, color: C.muted }}>
+                          AI가 그룹 항목 배열을 보내지 않았어요. 개발자 도구의 Console에서 원본 API 응답을 확인해주세요.
+                        </div>
+                      )}
                     </div>
                   </>
                 )}
